@@ -1,54 +1,604 @@
-<!doctype html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#176b73"><link rel="manifest" href="manifest.webmanifest"><title>Culture Calendar</title><style>
-:root{font-family:system-ui,sans-serif;color:#16313a;background:#f3f7f7}body{margin:0}header{background:#176b73;color:white;padding:18px}main{max-width:950px;margin:auto;padding:16px}section{background:white;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 12px #0001}h1{margin:0;font-size:23px}h2{font-size:18px}label{display:block;margin:8px 0}input,select,textarea,button{font:inherit;padding:9px;border:1px solid #c6d6d9;border-radius:8px;box-sizing:border-box}input,select,textarea{max-width:100%;width:100%}button{background:#176b73;color:white;border:0;cursor:pointer;margin:3px}button.secondary{background:#e7f1f1;color:#176b73}.flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.flex>*{flex:1}.week,.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}.week div{text-align:center;font-size:12px}.day{min-height:84px;background:#f6fafa;border-radius:7px;padding:4px;overflow:hidden;cursor:pointer}.day.today{outline:2px solid #176b73}.day.selected{background:#deeeee}.day .num{font-weight:700;font-size:12px}.chip{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px;border-radius:4px;margin-top:3px;background:#d8eef0}.item{border-bottom:1px solid #e2eaea;padding:9px 0}.muted{color:#627b82;font-size:12px}.danger{background:#a83f45}#status{font-size:13px;color:#28645e} @media(max-width:550px){main{padding:8px}section{padding:10px}.day{min-height:67px;padding:2px}.chip{font-size:9px;padding:2px}.flex>*{min-width:135px}}
-</style></head><body><header><h1>🧫 Culture Calendar</h1><small>細胞培養・実験管理</small></header><main>
-<section><h2>培養を登録</h2><form id="cultureForm"><div class="flex"><label>細胞名<input id="cellName" required placeholder="U87-GFP"></label><label>播種日（Day 0）<input id="startDate" type="date" required></label></div><label>メモ<input id="cultureNote" placeholder="継代番号、条件など"></label><button type="submit">培養を追加</button></form></section>
-<section><div class="flex"><h2>月間カレンダー</h2><div style="text-align:right"><button class="secondary" id="prevMonth">◀</button><strong id="monthTitle"></strong><button class="secondary" id="nextMonth">▶</button></div></div><div class="week"><div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div></div><div class="calendar" id="calendar"></div><p class="muted">日付をタップすると、その日の培養状況・操作履歴が表示されます。</p><div id="dayDetails"></div></section>
-<section><h2>操作・予定を登録</h2><form id="eventForm"><label>対象培養<select id="eventCulture" required></select></label><div class="flex"><label>日付<input id="eventDate" type="date" required></label><label>種別<select id="eventType"><option value="medium">培地交換</option><option value="passage">継代</option><option value="observe">観察</option><option value="other">その他</option></select></label><label>区分<select id="eventStatus"><option value="planned">予定</option><option value="done">実施済み</option></select></label></div><label>操作内容<textarea id="eventNote" rows="2" placeholder="例：EGM-2を全量交換"></textarea></label><button type="submit">記録を追加</button></form><p class="muted">継代を「実施済み」で登録しても元のDay数は維持します。継代後の培養は新規培養として登録してください。</p></section>
-<section><h2>現在の培養</h2><div id="cultureList"></div></section>
-<section><h2>今後の予定・リマインダー</h2><div id="reminders"></div><button id="enableNotify" class="secondary">通知の許可を確認</button><p class="muted">アプリ起動中は当日予定を通知できます。アプリ終了中の定刻通知は未対応です。</p></section>
-<section><h2>データ管理</h2><button id="exportBtn">JSONバックアップを保存</button><label>バックアップから復元<input type="file" id="importFile" accept="application/json,.json"></label><p id="status"></p><p class="muted">データはこのブラウザの端末内に保存されます。ブラウザのデータ消去や端末故障に備えて定期的にバックアップしてください。個人情報・患者情報は入力しないでください。</p></section>
-</main><script>
-'use strict';
-const KEY='culture-calendar-v1';const $=id=>document.getElementById(id);
-const localISO=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
-const diff=(a,b)=>Math.round((Date.UTC(...a.split('-').map((n,i)=>i===1?Number(n)-1:Number(n)))-Date.UTC(...b.split('-').map((n,i)=>i===1?Number(n)-1:Number(n))))/86400000);
-const today=()=>localISO(new Date());const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
-let state={cultures:[],events:[]};try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&Array.isArray(v.cultures)&&Array.isArray(v.events))state=v}catch(e){alert('保存データを読み込めませんでした。バックアップを確認してください。')}
-let current=new Date(),selected=today(),notified=new Set();current.setDate(1);
-function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
-function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e}
-function render(){renderCalendar();renderDay();renderCultures();renderReminders();renderSelect()}
-function renderCalendar(){const y=current.getFullYear(),m=current.getMonth();$('monthTitle').textContent=`${y}年${m+1}月`;$('calendar').replaceChildren();for(let i=0;i<new Date(y,m,1).getDay();i++)$('calendar').append(el('div'));
-const total=new Date(y,m+1,0).getDate();for(let d=1;d<=total;d++){const ds=localISO(new Date(y,m,d)),cell=el('div',undefined,'day'+(ds===today()?' today':'')+(ds===selected?' selected':''));cell.append(el('div',String(d),'num'));
-for(const c of state.cultures){const n=diff(ds,c.start);if(n>=0){const chip=el('div',`${c.name} D${n}`,'chip');
-const mediumDone = state.events.some(e =>
-  e.cultureId === c.id &&
-  e.date === date &&
-  e.type === 'medium' &&
-  e.status === 'done'
-);
 
-if (mediumDone) {
-  chip.textContent += ' ☑';
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#176b73">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Culture Calendar</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#16313a;background:#f3f7f7}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:#176b73;color:white;padding:18px}
+main{max-width:950px;margin:auto;padding:12px 12px 90px}
+section{background:white;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 12px #0001}
+h1{margin:0;font-size:23px}
+h2{font-size:18px;margin-top:0}
+label{display:block;margin:8px 0}
+input,select,textarea,button{font:inherit;padding:9px;border:1px solid #c6d6d9;border-radius:8px}
+input,select,textarea{max-width:100%;width:100%}
+input[type=checkbox]{width:auto;accent-color:#176b73}
+input[type=color]{width:65px;height:42px;padding:3px}
+button{background:#176b73;color:white;border:0;cursor:pointer;margin:3px}
+button.secondary{background:#e7f1f1;color:#176b73}
+button.danger{background:#a83f45}
+.flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.flex>*{flex:1;min-width:120px}
+.week,.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.week div{text-align:center;font-size:12px}
+.day{min-height:86px;background:#f6fafa;border-radius:7px;padding:4px;overflow:hidden;cursor:pointer}
+.day.today{outline:2px solid #176b73}
+.day.selected{background:#deeeee}
+.num{font-weight:700;font-size:12px}
+.chip{font-size:10px;overflow:hidden;text-overflow:ellipsis;padding:3px;border-radius:4px;margin-top:3px;overflow-wrap:anywhere}
+.item{border-bottom:1px solid #e2eaea;padding:10px 0}
+.muted{color:#627b82;font-size:12px}
+.color-dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px}
+.fab{position:fixed;right:20px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#176b73;color:white;font-size:32px;box-shadow:0 4px 12px #0004;z-index:100}
+#registerPanel[hidden]{display:none}
+#registerPanel{position:fixed;inset:0;background:#0007;z-index:200;overflow-y:auto;padding:18px}
+.panel-content{background:white;max-width:620px;margin:20px auto;border-radius:14px;padding:18px}
+.panel-top{display:flex;justify-content:space-between;align-items:center}
+.close-btn{font-size:24px}
+.done-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.done-icon{display:inline-block;vertical-align:middle;margin-left:3px;width:14px;height:14px}
+.event-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.event-text{flex:1;min-width:160px}
+.color-picker{display:inline-flex;align-items:center;gap:6px}
+#status{font-size:13px;color:#28645e}
+@media(max-width:550px){
+main{padding:8px 8px 90px}
+section{padding:10px}
+.day{min-height:70px;padding:2px}
+.chip{font-size:9px;padding:2px}
+.flex>*{min-width:135px}
+.panel-content{margin:0 auto;padding:12px}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>🧫 Culture Calendar</h1>
+<small>細胞培養・実験管理</small>
+</header>
+
+<main>
+
+<section>
+<h2>現在の培養</h2>
+<div id="cultureList"></div>
+</section>
+
+<section>
+<div class="flex">
+<h2>月間カレンダー</h2>
+<div style="text-align:right">
+<button class="secondary" id="prevMonth">◀</button>
+<strong id="monthTitle"></strong>
+<button class="secondary" id="nextMonth">▶</button>
+</div>
+</div>
+<div class="week">
+<div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+</div>
+<div class="calendar" id="calendar"></div>
+<p class="muted">日付をタップすると、その日の培養状況・操作履歴が表示されます。</p>
+<div id="dayDetails"></div>
+</section>
+
+<section>
+<h2>今後の予定・リマインダー</h2>
+<div id="reminders"></div>
+<button id="enableNotify" class="secondary">通知の許可を確認</button>
+<p class="muted">アプリ起動中は当日予定を通知できます。アプリ終了中の定刻通知は未対応です。</p>
+</section>
+
+<section>
+<h2>データ管理</h2>
+<button id="exportBtn">JSONバックアップを保存</button>
+<label>バックアップから復元
+<input type="file" id="importFile" accept="application/json,.json">
+</label>
+<p id="status"></p>
+<p class="muted">データはこのブラウザの端末内に保存されます。定期的にバックアップしてください。患者情報・個人情報は入力しないでください。</p>
+</section>
+
+</main>
+
+<button class="fab" id="addButton" aria-label="登録画面を開く">＋</button>
+
+<div id="registerPanel" hidden>
+<div class="panel-content">
+<div class="panel-top">
+<h2>培養・操作を登録</h2>
+<button class="secondary close-btn" id="closePanel">×</button>
+</div>
+
+<h3>新しい培養</h3>
+<form id="cultureForm">
+<div class="flex">
+<label>細胞名
+<input id="cellName" required placeholder="U87-GFP">
+</label>
+<label>播種日（Day 0）
+<input id="startDate" type="date" required>
+</label>
+</div>
+<label>表示色
+<input id="cellColor" type="color" value="#5ba8e5">
+</label>
+<label>メモ
+<input id="cultureNote" placeholder="継代番号、条件など">
+</label>
+<button type="submit">培養を追加</button>
+</form>
+
+<hr>
+
+<h3>操作・予定を登録</h3>
+<form id="eventForm">
+<label>対象培養
+<select id="eventCulture" required></select>
+</label>
+<div class="flex">
+<label>日付
+<input id="eventDate" type="date" required>
+</label>
+<label>種別
+<select id="eventType">
+<option value="medium">培地交換</option>
+<option value="passage">継代</option>
+<option value="observe">観察</option>
+<option value="other">その他</option>
+</select>
+</label>
+<label>区分
+<select id="eventStatus">
+<option value="planned">予定</option>
+<option value="done">実施済み</option>
+</select>
+</label>
+</div>
+<label>操作内容
+<textarea id="eventNote" rows="2" placeholder="例：EGM-2を全量交換"></textarea>
+</label>
+<button type="submit">記録を追加</button>
+</form>
+<p class="muted">継代を実施済みで登録しても元のDay数は維持します。継代後の培養は新規培養として登録してください。</p>
+</div>
+</div>
+
+<script>
+'use strict';
+
+const KEY='culture-calendar-v1';
+const $=id=>document.getElementById(id);
+const localISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>localISO(new Date());
+const parseDate=s=>{
+  const [y,m,d]=s.split('-').map(Number);
+  return new Date(y,m-1,d);
+};
+const diff=(a,b)=>Math.round(
+  (Date.UTC(...a.split('-').map((n,i)=>i===1?Number(n)-1:Number(n)))-
+   Date.UTC(...b.split('-').map((n,i)=>i===1?Number(n)-1:Number(n))))/86400000
+);
+const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
+
+let state={cultures:[],events:[]};
+try{
+  const v=JSON.parse(localStorage.getItem(KEY));
+  if(v&&Array.isArray(v.cultures)&&Array.isArray(v.events))state=v;
+}catch(e){
+  alert('保存データを読み込めませんでした。バックアップを確認してください。');
 }
 
-cell.append(chip);
-}}
-const events=state.events.filter(e=>e.date===ds);if(events.length)cell.append(el('div',`● 操作 ${events.length}件`,'muted'));cell.onclick=()=>{selected=ds;render()};$('calendar').append(cell)}}
-function renderDay(){const box=$('dayDetails');box.replaceChildren(el('h3',selected));for(const c of state.cultures){const n=diff(selected,c.start);if(n>=0)box.append(el('div',`${c.name} — Day ${n}`,'item'))}for(const e of state.events.filter(e=>e.date===selected)){const c=state.cultures.find(c=>c.id===e.cultureId);const line=el('div',`${e.status==='done'?'✓ 実施':'◷ 予定'}｜${c?.name||'削除済み'}｜${eventName(e.type)}｜${e.note||''}`,'item');const btn=el('button','削除','danger');btn.onclick=()=>{if(confirm('この記録を削除しますか？')){state.events=state.events.filter(x=>x.id!==e.id);save()}};line.append(btn);box.append(line)}}
-function eventName(t){return {medium:'培地交換',passage:'継代',observe:'観察',other:'その他'}[t]||t}
-function renderCultures(){const box=$('cultureList');box.replaceChildren();if(!state.cultures.length)box.append(el('p','培養を登録してください。','muted'));for(const c of state.cultures){const n=diff(today(),c.start),line=el('div',`${c.name}｜${c.start}｜${n>=0?'Day '+n:'開始まで '+(-n)+'日'}${c.note?'｜'+c.note:''}`,'item');const b=el('button','削除','danger');b.onclick=()=>{if(confirm(`${c.name}と関連する操作履歴を削除しますか？`)){state.cultures=state.cultures.filter(x=>x.id!==c.id);state.events=state.events.filter(x=>x.cultureId!==c.id);save()}};line.append(b);box.append(line)}}
-function renderSelect(){const sel=$('eventCulture'),old=sel.value;sel.replaceChildren();for(const c of state.cultures){const opt=el('option',c.name);opt.value=c.id;sel.append(opt)}if(state.cultures.some(c=>c.id===old))sel.value=old}
-function renderReminders(){const box=$('reminders');box.replaceChildren();const upcoming=state.events.filter(e=>e.status==='planned'&&diff(e.date,today())>=0).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,20);if(!upcoming.length)box.append(el('p','予定はありません。','muted'));for(const e of upcoming){const c=state.cultures.find(c=>c.id===e.cultureId);const line=el('div',`${e.date}｜${c?.name||'削除済み'}｜${eventName(e.type)}｜${e.note||''}`,'item');const b=el('button','実施済みにする','secondary');b.onclick=()=>{e.status='done';save()};line.append(b);box.append(line)}}
-$('cultureForm').onsubmit=e=>{e.preventDefault();state.cultures.push({id:uid(),name:$('cellName').value.trim(),start:$('startDate').value,note:$('cultureNote').value.trim()});$('cultureForm').reset();$('startDate').value=today();save()};
-$('eventForm').onsubmit=e=>{e.preventDefault();if(!$('eventCulture').value)return;state.events.push({id:uid(),cultureId:$('eventCulture').value,date:$('eventDate').value,type:$('eventType').value,status:$('eventStatus').value,note:$('eventNote').value.trim()});$('eventNote').value='';save()};
-$('prevMonth').onclick=()=>{current.setMonth(current.getMonth()-1);render()};$('nextMonth').onclick=()=>{current.setMonth(current.getMonth()+1);render()};
-$('exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify({version:1,...state},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`culture-calendar-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-$('importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.cultures)||!Array.isArray(data.events)||!data.cultures.every(c=>typeof c.id==='string'&&typeof c.name==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(c.start))||!data.events.every(x=>typeof x.id==='string'&&typeof x.cultureId==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)))throw Error('ファイル形式が不正です');if(confirm('現在のデータをバックアップの内容で置き換えますか？')){state={cultures:data.cultures,events:data.events};save();$('status').textContent='復元しました'}}catch(err){$('status').textContent='復元できません: '+err.message}e.target.value=''};
-$('enableNotify').onclick=async()=>{if(!('Notification'in window))return alert('このブラウザは通知に対応していません');const p=await Notification.requestPermission();alert(p==='granted'?'通知を許可しました。アプリ起動中の当日予定を通知します。':'通知は許可されませんでした')};
-function checkToday(){if(!('Notification'in window)||Notification.permission!=='granted')return;for(const e of state.events.filter(x=>x.status==='planned'&&x.date===today())){if(notified.has(e.id))continue;notified.add(e.id);const c=state.cultures.find(c=>c.id===e.cultureId);try{new Notification('本日の培養予定',{body:`${c?.name||'培養'}：${eventName(e.type)} ${e.note||''}`,icon:'icon.svg',tag:e.id})}catch(err){console.warn(err)}}}
-$('startDate').value=today();$('eventDate').value=today();render();checkToday();setInterval(()=>{render();checkToday()},60000);
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);
-</script></body></html>
+const palette=['#5ba8e5','#e99a57','#77b98b','#b18ade','#e4779a','#56b8b4'];
+state.cultures.forEach((c,i)=>{
+  if(!/^#[0-9a-f]{6}$/i.test(c.color||''))c.color=palette[i%palette.length];
+});
 
+let current=new Date();
+current.setDate(1);
+let selected=today();
+let notified=new Set();
+
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(state));
+  render();
+}
+
+function el(tag,text,cls){
+  const e=document.createElement(tag);
+  if(text!==undefined)e.textContent=text;
+  if(cls)e.className=cls;
+  return e;
+}
+
+function eventName(t){
+  return {medium:'培地交換',passage:'継代',observe:'観察',other:'その他'}[t]||t;
+}
+
+function checkIcon(){
+  const span=el('span',undefined,'done-icon');
+  span.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#16803c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m7 12 3 3 7-7"/></svg>';
+  return span;
+}
+
+function mediumDone(cultureId,date){
+  return state.events.some(e=>
+    e.cultureId===cultureId &&
+    e.date===date &&
+    e.type==='medium' &&
+    e.status==='done'
+  );
+}
+
+function render(){
+  renderCalendar();
+  renderDay();
+  renderCultures();
+  renderReminders();
+  renderSelect();
+}
+
+function renderCalendar(){
+  const y=current.getFullYear(),m=current.getMonth();
+  $('monthTitle').textContent=`${y}年${m+1}月`;
+  const calendar=$('calendar');
+  calendar.replaceChildren();
+
+  for(let i=0;i<new Date(y,m,1).getDay();i++){
+    calendar.append(el('div'));
+  }
+
+  const total=new Date(y,m+1,0).getDate();
+
+  for(let d=1;d<=total;d++){
+    const ds=localISO(new Date(y,m,d));
+    const cell=el('div',undefined,'day'+(ds===today()?' today':'')+(ds===selected?' selected':''));
+    cell.append(el('div',String(d),'num'));
+
+    for(const c of state.cultures){
+      const n=diff(ds,c.start);
+      if(n<0)continue;
+
+      const chip=el('div',`${c.name} D${n}`,'chip');
+      chip.style.background=c.color+'30';
+      chip.style.borderLeft=`3px solid ${c.color}`;
+
+      if(mediumDone(c.id,ds)){
+        chip.append(checkIcon());
+      }
+      cell.append(chip);
+    }
+
+    const events=state.events.filter(e=>e.date===ds);
+    if(events.length){
+      cell.append(el('div',`● 操作 ${events.length}件`,'muted'));
+    }
+
+    cell.onclick=()=>{
+      selected=ds;
+      render();
+    };
+    calendar.append(cell);
+  }
+}
+
+function makeEventRow(e){
+  const c=state.cultures.find(c=>c.id===e.cultureId);
+  const line=el('div',undefined,'item event-row');
+
+  if(e.type==='medium'){
+    const label=el('label',undefined,'done-check');
+    const cb=document.createElement('input');
+    cb.type='checkbox';
+    cb.checked=e.status==='done';
+    cb.setAttribute('aria-label','培地交換を実施済みにする');
+    cb.onchange=()=>{
+      e.status=cb.checked?'done':'planned';
+      save();
+    };
+    label.append(cb);
+    label.append(el('span',cb.checked?'実施済み':'未実施'));
+    line.append(label);
+  }else{
+    line.append(el('span',e.status==='done'?'✓ 実施':'◷ 予定'));
+  }
+
+  const description=el('span',
+    `${c?.name||'削除済み'}｜${eventName(e.type)}${e.note?'｜'+e.note:''}`,
+    'event-text'
+  );
+  line.append(description);
+
+  if(e.type!=='medium'&&e.status==='planned'){
+    const done=el('button','実施済みにする','secondary');
+    done.onclick=()=>{
+      e.status='done';
+      save();
+    };
+    line.append(done);
+  }
+
+  const del=el('button','削除','danger');
+  del.onclick=()=>{
+    if(confirm('この記録を削除しますか？')){
+      state.events=state.events.filter(x=>x.id!==e.id);
+      save();
+    }
+  };
+  line.append(del);
+  return line;
+}
+
+function renderDay(){
+  const box=$('dayDetails');
+  box.replaceChildren(el('h3',selected));
+
+  for(const c of state.cultures){
+    const n=diff(selected,c.start);
+    if(n<0)continue;
+
+    const line=el('div',undefined,'item');
+    const dot=el('span',undefined,'color-dot');
+    dot.style.background=c.color;
+    line.append(dot);
+    line.append(document.createTextNode(`${c.name} — Day ${n}`));
+
+    if(mediumDone(c.id,selected))line.append(checkIcon());
+    box.append(line);
+  }
+
+  const events=state.events.filter(e=>e.date===selected);
+  if(!events.length){
+    box.append(el('p','この日の操作記録はありません。','muted'));
+  }else{
+    box.append(el('h4','操作記録'));
+    for(const e of events)box.append(makeEventRow(e));
+  }
+
+  const add=el('button','＋ この日に操作を登録','secondary');
+  add.onclick=()=>{
+    $('eventDate').value=selected;
+    openPanel();
+  };
+  box.append(add);
+}
+
+function renderCultures(){
+  const box=$('cultureList');
+  box.replaceChildren();
+
+  if(!state.cultures.length){
+    box.append(el('p','右下の＋から培養を登録してください。','muted'));
+  }
+
+  for(const c of state.cultures){
+    const n=diff(today(),c.start);
+    const line=el('div',undefined,'item');
+
+    const dot=el('span',undefined,'color-dot');
+    dot.style.background=c.color;
+    line.append(dot);
+
+    const text=`${c.name}｜${c.start}｜${n>=0?'Day '+n:'開始まで '+(-n)+'日'}${c.note?'｜'+c.note:''}`;
+    line.append(document.createTextNode(text));
+
+    const colorLabel=el('label',undefined,'color-picker');
+    colorLabel.append(el('span','色：'));
+    const picker=document.createElement('input');
+    picker.type='color';
+    picker.value=c.color;
+    picker.onchange=()=>{
+      c.color=picker.value;
+      save();
+    };
+    colorLabel.append(picker);
+    line.append(colorLabel);
+
+    const del=el('button','削除','danger');
+    del.onclick=()=>{
+      if(confirm(`${c.name}と関連する操作履歴を削除しますか？`)){
+        state.cultures=state.cultures.filter(x=>x.id!==c.id);
+        state.events=state.events.filter(x=>x.cultureId!==c.id);
+        save();
+      }
+    };
+    line.append(del);
+    box.append(line);
+  }
+}
+
+function renderSelect(){
+  const sel=$('eventCulture');
+  const old=sel.value;
+  sel.replaceChildren();
+
+  for(const c of state.cultures){
+    const opt=el('option',c.name);
+    opt.value=c.id;
+    sel.append(opt);
+  }
+
+  if(state.cultures.some(c=>c.id===old))sel.value=old;
+}
+
+function renderReminders(){
+  const box=$('reminders');
+  box.replaceChildren();
+
+  const upcoming=state.events
+    .filter(e=>e.status==='planned'&&diff(e.date,today())>=0)
+    .sort((a,b)=>a.date.localeCompare(b.date))
+    .slice(0,20);
+
+  if(!upcoming.length){
+    box.append(el('p','予定はありません。','muted'));
+  }
+
+  for(const e of upcoming){
+    const line=el('div',undefined,'item');
+    line.append(el('div',`${e.date}｜${state.cultures.find(c=>c.id===e.cultureId)?.name||'削除済み'}｜${eventName(e.type)}｜${e.note||''}`));
+
+    if(e.type==='medium'){
+      const label=el('label',undefined,'done-check');
+      const cb=document.createElement('input');
+      cb.type='checkbox';
+      cb.checked=false;
+      cb.onchange=()=>{
+        e.status='done';
+        save();
+      };
+      label.append(cb,el('span','培地交換完了'));
+      line.append(label);
+    }else{
+      const done=el('button','実施済みにする','secondary');
+      done.onclick=()=>{
+        e.status='done';
+        save();
+      };
+      line.append(done);
+    }
+    box.append(line);
+  }
+}
+
+function openPanel(){
+  $('registerPanel').hidden=false;
+}
+function closePanel(){
+  $('registerPanel').hidden=true;
+}
+
+$('addButton').onclick=openPanel;
+$('closePanel').onclick=closePanel;
+$('registerPanel').onclick=e=>{
+  if(e.target===$('registerPanel'))closePanel();
+};
+
+$('cultureForm').onsubmit=e=>{
+  e.preventDefault();
+  state.cultures.push({
+    id:uid(),
+    name:$('cellName').value.trim(),
+    start:$('startDate').value,
+    note:$('cultureNote').value.trim(),
+    color:$('cellColor').value
+  });
+  $('cultureForm').reset();
+  $('startDate').value=today();
+  save();
+  closePanel();
+};
+
+$('eventForm').onsubmit=e=>{
+  e.preventDefault();
+  if(!$('eventCulture').value)return;
+
+  state.events.push({
+    id:uid(),
+    cultureId:$('eventCulture').value,
+    date:$('eventDate').value,
+    type:$('eventType').value,
+    status:$('eventStatus').value,
+    note:$('eventNote').value.trim()
+  });
+  $('eventNote').value='';
+  save();
+  closePanel();
+};
+
+$('prevMonth').onclick=()=>{
+  current.setMonth(current.getMonth()-1);
+  render();
+};
+$('nextMonth').onclick=()=>{
+  current.setMonth(current.getMonth()+1);
+  render();
+};
+
+$('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify({version:1,...state},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`culture-calendar-${today()}.json`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+
+$('importFile').onchange=async e=>{
+  const file=e.target.files?.[0];
+  if(!file)return;
+
+  try{
+    const data=JSON.parse(await file.text());
+
+    if(!Array.isArray(data.cultures)||!Array.isArray(data.events)||
+      !data.cultures.every(c=>typeof c.id==='string'&&typeof c.name==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(c.start))||
+      !data.events.every(x=>typeof x.id==='string'&&typeof x.cultureId==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x.date))){
+      throw Error('ファイル形式が不正です');
+    }
+
+    if(confirm('現在のデータをバックアップの内容で置き換えますか？')){
+      state={cultures:data.cultures,events:data.events};
+      state.cultures.forEach((c,i)=>{
+        if(!/^#[0-9a-f]{6}$/i.test(c.color||''))c.color=palette[i%palette.length];
+      });
+      save();
+      $('status').textContent='復元しました';
+    }
+  }catch(err){
+    $('status').textContent='復元できません: '+err.message;
+  }
+  e.target.value='';
+};
+
+$('enableNotify').onclick=async()=>{
+  if(!('Notification'in window)){
+    alert('このブラウザは通知に対応していません');
+    return;
+  }
+  const p=await Notification.requestPermission();
+  alert(p==='granted'?'通知を許可しました。アプリ起動中の当日予定を通知します。':'通知は許可されませんでした');
+};
+
+function checkToday(){
+  if(!('Notification'in window)||Notification.permission!=='granted')return;
+
+  for(const e of state.events.filter(x=>x.status==='planned'&&x.date===today())){
+    if(notified.has(e.id))continue;
+    notified.add(e.id);
+    const c=state.cultures.find(c=>c.id===e.cultureId);
+    try{
+      new Notification('本日の培養予定',{
+        body:`${c?.name||'培養'}：${eventName(e.type)} ${e.note||''}`,
+        icon:'icon.svg',
+        tag:e.id
+      });
+    }catch(err){
+      console.warn(err);
+    }
+  }
+}
+
+$('startDate').value=today();
+$('eventDate').value=today();
+render();
+checkToday();
+
+setInterval(()=>{
+  render();
+  checkToday();
+},60000);
+
+if('serviceWorker'in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(console.warn);
+}
+</script>
+</body>
+</html>
