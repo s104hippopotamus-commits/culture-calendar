@@ -46,8 +46,73 @@ button.danger{background:#a83f45}
 .done-icon{display:inline-block;vertical-align:middle;margin-left:3px;width:14px;height:14px}
 .event-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .event-text{flex:1;min-width:160px}
-.color-picker{display:inline-flex;align-items:center;gap:6px}
 #status{font-size:13px;color:#28645e}
+
+/* 培養リスト */
+.culture-row{
+  position:relative;
+  overflow:hidden;
+  border-radius:12px;
+  margin:10px 0;
+  background:#f4f8f8;
+  touch-action:pan-y;
+}
+.culture-delete{
+  position:absolute;
+  right:0;top:0;bottom:0;
+  width:88px;
+  background:#bb3942;
+  color:white;
+  border:0;
+  border-radius:0;
+  margin:0;
+  font-weight:700;
+  z-index:1;
+}
+.culture-front{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:15px 14px;
+  min-height:86px;
+  background:#f4f8f8;
+  border-left:6px solid #5ba8e5;
+  transform:translateX(0);
+  transition:transform .2s ease;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.culture-row.open .culture-front{
+  transform:translateX(-88px);
+}
+.culture-info{min-width:0;flex:1}
+.culture-name{
+  font-size:20px;
+  font-weight:750;
+  overflow-wrap:anywhere;
+}
+.culture-date{
+  font-size:15px;
+  margin-top:5px;
+  color:#4b6971;
+}
+.culture-day{
+  font-size:23px;
+  font-weight:800;
+  white-space:nowrap;
+  color:#176b73;
+}
+.culture-note{
+  font-size:13px;
+  color:#627b82;
+  margin-top:5px;
+  overflow-wrap:anywhere;
+}
+.swipe-help{font-size:12px;color:#627b82;margin:0 0 8px}
+
 @media(max-width:550px){
 main{padding:8px 8px 90px}
 section{padding:10px}
@@ -55,6 +120,9 @@ section{padding:10px}
 .chip{font-size:9px;padding:2px}
 .flex>*{min-width:135px}
 .panel-content{margin:0 auto;padding:12px}
+.culture-name{font-size:19px}
+.culture-day{font-size:21px}
+.culture-date{font-size:14px}
 }
 </style>
 </head>
@@ -63,11 +131,10 @@ section{padding:10px}
 <h1>🧫 Culture Calendar</h1>
 <small>細胞培養・実験管理</small>
 </header>
-
 <main>
-
 <section>
 <h2>現在の培養</h2>
+<p class="swipe-help">項目を左へスワイプすると削除できます。</p>
 <div id="cultureList"></div>
 </section>
 
@@ -104,7 +171,6 @@ section{padding:10px}
 <p id="status"></p>
 <p class="muted">データはこのブラウザの端末内に保存されます。定期的にバックアップしてください。患者情報・個人情報は入力しないでください。</p>
 </section>
-
 </main>
 
 <button class="fab" id="addButton" aria-label="登録画面を開く">＋</button>
@@ -115,58 +181,37 @@ section{padding:10px}
 <h2>培養・操作を登録</h2>
 <button class="secondary close-btn" id="closePanel">×</button>
 </div>
-
 <h3>新しい培養</h3>
 <form id="cultureForm">
 <div class="flex">
-<label>細胞名
-<input id="cellName" required placeholder="U87-GFP">
-</label>
-<label>播種日（Day 0）
-<input id="startDate" type="date" required>
-</label>
+<label>細胞名<input id="cellName" required placeholder="U87-GFP"></label>
+<label>播種日（Day 0）<input id="startDate" type="date" required></label>
 </div>
-<label>表示色
-<input id="cellColor" type="color" value="#5ba8e5">
-</label>
-<label>メモ
-<input id="cultureNote" placeholder="継代番号、条件など">
-</label>
+<label>表示色<input id="cellColor" type="color" value="#5ba8e5"></label>
+<label>メモ<input id="cultureNote" placeholder="継代番号、条件など"></label>
 <button type="submit">培養を追加</button>
 </form>
-
 <hr>
-
 <h3>操作・予定を登録</h3>
 <form id="eventForm">
-<label>対象培養
-<select id="eventCulture" required></select>
-</label>
+<label>対象培養<select id="eventCulture" required></select></label>
 <div class="flex">
-<label>日付
-<input id="eventDate" type="date" required>
-</label>
-<label>種別
-<select id="eventType">
+<label>日付<input id="eventDate" type="date" required></label>
+<label>種別<select id="eventType">
 <option value="medium">培地交換</option>
 <option value="passage">継代</option>
 <option value="observe">観察</option>
 <option value="other">その他</option>
-</select>
-</label>
-<label>区分
-<select id="eventStatus">
+</select></label>
+<label>区分<select id="eventStatus">
 <option value="planned">予定</option>
 <option value="done">実施済み</option>
-</select>
-</label>
+</select></label>
 </div>
-<label>操作内容
-<textarea id="eventNote" rows="2" placeholder="例：EGM-2を全量交換"></textarea>
-</label>
+<label>操作内容<textarea id="eventNote" rows="2" placeholder="例：EGM-2を全量交換"></textarea></label>
 <button type="submit">記録を追加</button>
 </form>
-<p class="muted">継代を実施済みで登録しても元のDay数は維持します。継代後の培養は新規培養として登録してください。</p>
+<p class="muted">継代後の培養は新規培養として登録してください。</p>
 </div>
 </div>
 
@@ -177,15 +222,12 @@ const KEY='culture-calendar-v1';
 const $=id=>document.getElementById(id);
 const localISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const today=()=>localISO(new Date());
-const parseDate=s=>{
-  const [y,m,d]=s.split('-').map(Number);
-  return new Date(y,m-1,d);
-};
 const diff=(a,b)=>Math.round(
   (Date.UTC(...a.split('-').map((n,i)=>i===1?Number(n)-1:Number(n)))-
    Date.UTC(...b.split('-').map((n,i)=>i===1?Number(n)-1:Number(n))))/86400000
 );
 const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
+const palette=['#5ba8e5','#e99a57','#77b98b','#b18ade','#e4779a','#56b8b4'];
 
 let state={cultures:[],events:[]};
 try{
@@ -194,11 +236,12 @@ try{
 }catch(e){
   alert('保存データを読み込めませんでした。バックアップを確認してください。');
 }
-
-const palette=['#5ba8e5','#e99a57','#77b98b','#b18ade','#e4779a','#56b8b4'];
-state.cultures.forEach((c,i)=>{
-  if(!/^#[0-9a-f]{6}$/i.test(c.color||''))c.color=palette[i%palette.length];
-});
+function normalizeColors(){
+  state.cultures.forEach((c,i)=>{
+    if(!/^#[0-9a-f]{6}$/i.test(c.color||''))c.color=palette[i%palette.length];
+  });
+}
+normalizeColors();
 
 let current=new Date();
 current.setDate(1);
@@ -209,33 +252,26 @@ function save(){
   localStorage.setItem(KEY,JSON.stringify(state));
   render();
 }
-
 function el(tag,text,cls){
   const e=document.createElement(tag);
   if(text!==undefined)e.textContent=text;
   if(cls)e.className=cls;
   return e;
 }
-
 function eventName(t){
   return {medium:'培地交換',passage:'継代',observe:'観察',other:'その他'}[t]||t;
 }
-
 function checkIcon(){
   const span=el('span',undefined,'done-icon');
   span.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#16803c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m7 12 3 3 7-7"/></svg>';
   return span;
 }
-
 function mediumDone(cultureId,date){
   return state.events.some(e=>
-    e.cultureId===cultureId &&
-    e.date===date &&
-    e.type==='medium' &&
-    e.status==='done'
+    e.cultureId===cultureId&&e.date===date&&
+    e.type==='medium'&&e.status==='done'
   );
 }
-
 function render(){
   renderCalendar();
   renderDay();
@@ -243,90 +279,59 @@ function render(){
   renderReminders();
   renderSelect();
 }
-
 function renderCalendar(){
   const y=current.getFullYear(),m=current.getMonth();
   $('monthTitle').textContent=`${y}年${m+1}月`;
   const calendar=$('calendar');
   calendar.replaceChildren();
-
-  for(let i=0;i<new Date(y,m,1).getDay();i++){
-    calendar.append(el('div'));
-  }
-
+  for(let i=0;i<new Date(y,m,1).getDay();i++)calendar.append(el('div'));
   const total=new Date(y,m+1,0).getDate();
-
   for(let d=1;d<=total;d++){
     const ds=localISO(new Date(y,m,d));
     const cell=el('div',undefined,'day'+(ds===today()?' today':'')+(ds===selected?' selected':''));
     cell.append(el('div',String(d),'num'));
-
     for(const c of state.cultures){
       const n=diff(ds,c.start);
       if(n<0)continue;
-
       const chip=el('div',`${c.name} D${n}`,'chip');
       chip.style.background=c.color+'30';
       chip.style.borderLeft=`3px solid ${c.color}`;
-
-      if(mediumDone(c.id,ds)){
-        chip.append(checkIcon());
-      }
+      if(mediumDone(c.id,ds))chip.append(checkIcon());
       cell.append(chip);
     }
-
     const events=state.events.filter(e=>e.date===ds);
-    if(events.length){
-      cell.append(el('div',`● 操作 ${events.length}件`,'muted'));
-    }
-
-    cell.onclick=()=>{
-      selected=ds;
-      render();
-    };
+    if(events.length)cell.append(el('div',`● 操作 ${events.length}件`,'muted'));
+    cell.onclick=()=>{selected=ds;render()};
     calendar.append(cell);
   }
 }
-
 function makeEventRow(e){
   const c=state.cultures.find(c=>c.id===e.cultureId);
   const line=el('div',undefined,'item event-row');
-
   if(e.type==='medium'){
     const label=el('label',undefined,'done-check');
     const cb=document.createElement('input');
     cb.type='checkbox';
     cb.checked=e.status==='done';
     cb.setAttribute('aria-label','培地交換を実施済みにする');
-    cb.onchange=()=>{
-      e.status=cb.checked?'done':'planned';
-      save();
-    };
-    label.append(cb);
-    label.append(el('span',cb.checked?'実施済み':'未実施'));
+    cb.onchange=()=>{e.status=cb.checked?'done':'planned';save()};
+    label.append(cb,el('span',cb.checked?'実施済み':'未実施'));
     line.append(label);
   }else{
     line.append(el('span',e.status==='done'?'✓ 実施':'◷ 予定'));
   }
-
-  const description=el('span',
+  line.append(el('span',
     `${c?.name||'削除済み'}｜${eventName(e.type)}${e.note?'｜'+e.note:''}`,
     'event-text'
-  );
-  line.append(description);
-
+  ));
   if(e.type!=='medium'&&e.status==='planned'){
     const done=el('button','実施済みにする','secondary');
-    done.onclick=()=>{
-      e.status='done';
-      save();
-    };
+    done.onclick=()=>{e.status='done';save()};
     line.append(done);
   }
-
   const del=el('button','削除','danger');
   del.onclick=()=>{
-    if(confirm('この記録を削除しますか？')){
+    if(confirm('この操作記録を削除しますか？')){
       state.events=state.events.filter(x=>x.id!==e.id);
       save();
     }
@@ -334,25 +339,19 @@ function makeEventRow(e){
   line.append(del);
   return line;
 }
-
 function renderDay(){
   const box=$('dayDetails');
   box.replaceChildren(el('h3',selected));
-
   for(const c of state.cultures){
     const n=diff(selected,c.start);
     if(n<0)continue;
-
     const line=el('div',undefined,'item');
     const dot=el('span',undefined,'color-dot');
     dot.style.background=c.color;
-    line.append(dot);
-    line.append(document.createTextNode(`${c.name} — Day ${n}`));
-
+    line.append(dot,document.createTextNode(`${c.name} — Day ${n}`));
     if(mediumDone(c.id,selected))line.append(checkIcon());
     box.append(line);
   }
-
   const events=state.events.filter(e=>e.date===selected);
   if(!events.length){
     box.append(el('p','この日の操作記録はありません。','muted'));
@@ -360,114 +359,150 @@ function renderDay(){
     box.append(el('h4','操作記録'));
     for(const e of events)box.append(makeEventRow(e));
   }
-
   const add=el('button','＋ この日に操作を登録','secondary');
-  add.onclick=()=>{
-    $('eventDate').value=selected;
-    openPanel();
-  };
+  add.onclick=()=>{$('eventDate').value=selected;openPanel()};
   box.append(add);
 }
 
+/* 培養リスト：左スワイプで削除ボタンを表示 */
 function renderCultures(){
   const box=$('cultureList');
   box.replaceChildren();
-
   if(!state.cultures.length){
     box.append(el('p','右下の＋から培養を登録してください。','muted'));
+    return;
   }
 
   for(const c of state.cultures){
     const n=diff(today(),c.start);
-    const line=el('div',undefined,'item');
-
-    const dot=el('span',undefined,'color-dot');
-    dot.style.background=c.color;
-    line.append(dot);
-
-    const text=`${c.name}｜${c.start}｜${n>=0?'Day '+n:'開始まで '+(-n)+'日'}${c.note?'｜'+c.note:''}`;
-    line.append(document.createTextNode(text));
-
-    const del=el('button','削除','danger');
+    const row=el('div',undefined,'culture-row');
+    const del=el('button','削除','culture-delete');
+    del.type='button';
+    del.setAttribute('aria-label',`${c.name}を削除`);
     del.onclick=()=>{
-      if(confirm(`${c.name}と関連する操作履歴を削除しますか？`)){
+      const count=state.events.filter(e=>e.cultureId===c.id).length;
+      const message=
+        `「${c.name}」を削除しますか？\n\n`+
+        `この培養に関連する操作記録 ${count}件も削除されます。\n`+
+        'この操作は元に戻せません。';
+      if(confirm(message)){
         state.cultures=state.cultures.filter(x=>x.id!==c.id);
         state.events=state.events.filter(x=>x.cultureId!==c.id);
         save();
+      }else{
+        row.classList.remove('open');
       }
     };
-    line.append(del);
-    box.append(line);
+
+    const front=el('div',undefined,'culture-front');
+    front.style.borderLeftColor=c.color;
+    const info=el('div',undefined,'culture-info');
+    info.append(el('div',c.name,'culture-name'));
+    info.append(el('div',`播種日：${c.start}`,'culture-date'));
+    if(c.note)info.append(el('div',c.note,'culture-note'));
+    front.append(info);
+    front.append(el('div',n>=0?`Day ${n}`:`あと${-n}日`,'culture-day'));
+    row.append(del,front);
+
+    let startX=0,startY=0,tracking=false;
+
+    front.addEventListener('touchstart',e=>{
+      if(e.touches.length!==1)return;
+      startX=e.touches[0].clientX;
+      startY=e.touches[0].clientY;
+      tracking=true;
+    },{passive:true});
+
+    front.addEventListener('touchend',e=>{
+      if(!tracking||!e.changedTouches.length)return;
+      tracking=false;
+      const dx=e.changedTouches[0].clientX-startX;
+      const dy=e.changedTouches[0].clientY-startY;
+      if(Math.abs(dy)>Math.abs(dx))return;
+      if(dx < -35){
+        box.querySelectorAll('.culture-row.open').forEach(r=>{
+          if(r!==row)r.classList.remove('open');
+        });
+        row.classList.add('open');
+      }else if(dx>35){
+        row.classList.remove('open');
+      }
+    },{passive:true});
+
+    front.addEventListener('touchcancel',()=>{tracking=false});
+
+    // PCではマウスによるドラッグにも対応
+    let mouseStart=null;
+    front.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='mouse'&&e.button===0){
+        mouseStart={x:e.clientX,y:e.clientY};
+      }
+    });
+    front.addEventListener('pointerup',e=>{
+      if(!mouseStart)return;
+      const dx=e.clientX-mouseStart.x;
+      const dy=e.clientY-mouseStart.y;
+      mouseStart=null;
+      if(Math.abs(dx)<35||Math.abs(dy)>Math.abs(dx))return;
+      if(dx<0){
+        box.querySelectorAll('.culture-row.open').forEach(r=>{
+          if(r!==row)r.classList.remove('open');
+        });
+        row.classList.add('open');
+      }else{
+        row.classList.remove('open');
+      }
+    });
+    front.addEventListener('pointercancel',()=>{mouseStart=null});
+
+    box.append(row);
   }
 }
-
 function renderSelect(){
-  const sel=$('eventCulture');
-  const old=sel.value;
+  const sel=$('eventCulture'),old=sel.value;
   sel.replaceChildren();
-
   for(const c of state.cultures){
     const opt=el('option',c.name);
     opt.value=c.id;
     sel.append(opt);
   }
-
   if(state.cultures.some(c=>c.id===old))sel.value=old;
 }
-
 function renderReminders(){
   const box=$('reminders');
   box.replaceChildren();
-
   const upcoming=state.events
     .filter(e=>e.status==='planned'&&diff(e.date,today())>=0)
     .sort((a,b)=>a.date.localeCompare(b.date))
     .slice(0,20);
-
-  if(!upcoming.length){
-    box.append(el('p','予定はありません。','muted'));
-  }
-
+  if(!upcoming.length)box.append(el('p','予定はありません。','muted'));
   for(const e of upcoming){
     const line=el('div',undefined,'item');
-    line.append(el('div',`${e.date}｜${state.cultures.find(c=>c.id===e.cultureId)?.name||'削除済み'}｜${eventName(e.type)}｜${e.note||''}`));
-
+    line.append(el('div',
+      `${e.date}｜${state.cultures.find(c=>c.id===e.cultureId)?.name||'削除済み'}｜${eventName(e.type)}｜${e.note||''}`
+    ));
     if(e.type==='medium'){
       const label=el('label',undefined,'done-check');
       const cb=document.createElement('input');
       cb.type='checkbox';
-      cb.checked=false;
-      cb.onchange=()=>{
-        e.status='done';
-        save();
-      };
+      cb.onchange=()=>{e.status='done';save()};
       label.append(cb,el('span','培地交換完了'));
       line.append(label);
     }else{
       const done=el('button','実施済みにする','secondary');
-      done.onclick=()=>{
-        e.status='done';
-        save();
-      };
+      done.onclick=()=>{e.status='done';save()};
       line.append(done);
     }
     box.append(line);
   }
 }
-
-function openPanel(){
-  $('registerPanel').hidden=false;
-}
-function closePanel(){
-  $('registerPanel').hidden=true;
-}
-
+function openPanel(){$('registerPanel').hidden=false}
+function closePanel(){$('registerPanel').hidden=true}
 $('addButton').onclick=openPanel;
 $('closePanel').onclick=closePanel;
 $('registerPanel').onclick=e=>{
   if(e.target===$('registerPanel'))closePanel();
 };
-
 $('cultureForm').onsubmit=e=>{
   e.preventDefault();
   state.cultures.push({
@@ -482,11 +517,9 @@ $('cultureForm').onsubmit=e=>{
   save();
   closePanel();
 };
-
 $('eventForm').onsubmit=e=>{
   e.preventDefault();
   if(!$('eventCulture').value)return;
-
   state.events.push({
     id:uid(),
     cultureId:$('eventCulture').value,
@@ -499,7 +532,6 @@ $('eventForm').onsubmit=e=>{
   save();
   closePanel();
 };
-
 $('prevMonth').onclick=()=>{
   current.setMonth(current.getMonth()-1);
   render();
@@ -508,9 +540,11 @@ $('nextMonth').onclick=()=>{
   current.setMonth(current.getMonth()+1);
   render();
 };
-
 $('exportBtn').onclick=()=>{
-  const blob=new Blob([JSON.stringify({version:1,...state},null,2)],{type:'application/json'});
+  const blob=new Blob(
+    [JSON.stringify({version:1,...state},null,2)],
+    {type:'application/json'}
+  );
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
@@ -518,25 +552,25 @@ $('exportBtn').onclick=()=>{
   a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-
 $('importFile').onchange=async e=>{
   const file=e.target.files?.[0];
   if(!file)return;
-
   try{
     const data=JSON.parse(await file.text());
-
     if(!Array.isArray(data.cultures)||!Array.isArray(data.events)||
-      !data.cultures.every(c=>typeof c.id==='string'&&typeof c.name==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(c.start))||
-      !data.events.every(x=>typeof x.id==='string'&&typeof x.cultureId==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x.date))){
+      !data.cultures.every(c=>
+        typeof c.id==='string'&&typeof c.name==='string'&&
+        /^\d{4}-\d{2}-\d{2}$/.test(c.start)
+      )||
+      !data.events.every(x=>
+        typeof x.id==='string'&&typeof x.cultureId==='string'&&
+        /^\d{4}-\d{2}-\d{2}$/.test(x.date)
+      )){
       throw Error('ファイル形式が不正です');
     }
-
     if(confirm('現在のデータをバックアップの内容で置き換えますか？')){
       state={cultures:data.cultures,events:data.events};
-      state.cultures.forEach((c,i)=>{
-        if(!/^#[0-9a-f]{6}$/i.test(c.color||''))c.color=palette[i%palette.length];
-      });
+      normalizeColors();
       save();
       $('status').textContent='復元しました';
     }
@@ -545,19 +579,19 @@ $('importFile').onchange=async e=>{
   }
   e.target.value='';
 };
-
 $('enableNotify').onclick=async()=>{
   if(!('Notification'in window)){
     alert('このブラウザは通知に対応していません');
     return;
   }
   const p=await Notification.requestPermission();
-  alert(p==='granted'?'通知を許可しました。アプリ起動中の当日予定を通知します。':'通知は許可されませんでした');
+  alert(p==='granted'?
+    '通知を許可しました。アプリ起動中の当日予定を通知します。':
+    '通知は許可されませんでした'
+  );
 };
-
 function checkToday(){
   if(!('Notification'in window)||Notification.permission!=='granted')return;
-
   for(const e of state.events.filter(x=>x.status==='planned'&&x.date===today())){
     if(notified.has(e.id))continue;
     notified.add(e.id);
@@ -568,22 +602,14 @@ function checkToday(){
         icon:'icon.svg',
         tag:e.id
       });
-    }catch(err){
-      console.warn(err);
-    }
+    }catch(err){console.warn(err)}
   }
 }
-
 $('startDate').value=today();
 $('eventDate').value=today();
 render();
 checkToday();
-
-setInterval(()=>{
-  render();
-  checkToday();
-},60000);
-
+setInterval(()=>{render();checkToday()},60000);
 if('serviceWorker'in navigator){
   navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
