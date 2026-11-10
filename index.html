@@ -38,3 +38,4 @@ function checkToday(){if(!('Notification'in window)||Notification.permission!=='
 $('startDate').value=today();$('eventDate').value=today();render();checkToday();setInterval(()=>{render();checkToday()},60000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);
 </script></body></html>
+
