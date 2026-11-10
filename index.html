@@ -388,18 +388,6 @@ function renderCultures(){
     const text=`${c.name}｜${c.start}｜${n>=0?'Day '+n:'開始まで '+(-n)+'日'}${c.note?'｜'+c.note:''}`;
     line.append(document.createTextNode(text));
 
-    const colorLabel=el('label',undefined,'color-picker');
-    colorLabel.append(el('span','色：'));
-    const picker=document.createElement('input');
-    picker.type='color';
-    picker.value=c.color;
-    picker.onchange=()=>{
-      c.color=picker.value;
-      save();
-    };
-    colorLabel.append(picker);
-    line.append(colorLabel);
-
     const del=el('button','削除','danger');
     del.onclick=()=>{
       if(confirm(`${c.name}と関連する操作履歴を削除しますか？`)){
