@@ -513,6 +513,158 @@ $('cultureForm').onsubmit=e=>{
     color:$('cellColor').value
   });
   $('cultureForm').reset();
+  
+/* 培養リストの並べ替え機能 */
+const reorderStyle = document.createElement('style');
+reorderStyle.textContent = `
+  .culture-handle {
+    flex: 0 0 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #627b82;
+    font-size: 26px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .culture-handle:active {
+    cursor: grabbing;
+    color: #176b73;
+  }
+  .culture-row.reordering {
+    outline: 2px solid #176b73;
+    box-shadow: 0 3px 12px #0002;
+  }
+`;
+document.head.append(reorderStyle);
+
+const originalRenderCultures = renderCultures;
+
+renderCultures = function() {
+  originalRenderCultures();
+
+  const list = $('cultureList');
+  const rows = [...list.querySelectorAll('.culture-row')];
+
+  rows.forEach((row, index) => {
+    const culture = state.cultures[index];
+    if (!culture) return;
+
+    row.dataset.cultureId = culture.id;
+
+    const front = row.querySelector('.culture-front');
+    if (!front) return;
+
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'culture-handle';
+    handle.textContent = '⠿';
+    handle.setAttribute(
+      'aria-label',
+      culture.name + 'の順番を変更'
+    );
+
+    front.prepend(handle);
+
+    let dragging = false;
+    let moved = false;
+
+    handle.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      dragging = true;
+      moved = false;
+
+      list.querySelectorAll('.culture-row.open')
+        .forEach(r => r.classList.remove('open'));
+
+      row.classList.add('reordering');
+
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = document
+        .elementFromPoint(e.clientX, e.clientY)
+        ?.closest('.culture-row');
+
+      if (!target || target === row ||
+          target.parentElement !== list) {
+        return;
+      }
+
+      const rect = target.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+
+      if (e.clientY < midpoint) {
+        list.insertBefore(row, target);
+      } else {
+        list.insertBefore(row, target.nextSibling);
+      }
+
+      moved = true;
+    });
+
+    function finishDrag(e, cancelled = false) {
+      if (!dragging) return;
+
+      dragging = false;
+      row.classList.remove('reordering');
+
+      e.stopPropagation();
+
+      if (cancelled) {
+        originalRenderCultures();
+        return;
+      }
+
+      if (!moved) return;
+
+      const ids = [...list.querySelectorAll('.culture-row')]
+        .map(r => r.dataset.cultureId);
+
+      const lookup = new Map(
+        state.cultures.map(c => [c.id, c])
+      );
+
+      state.cultures = ids
+        .map(id => lookup.get(id))
+        .filter(Boolean);
+
+      save();
+    }
+
+    handle.addEventListener('pointerup', e => {
+      finishDrag(e);
+    });
+
+    handle.addEventListener('pointercancel', e => {
+      finishDrag(e, true);
+    });
+  });
+};
+
+document.querySelector('.swipe-help').textContent =
+  '左端の⠿で並べ替え。項目を左へスワイプすると削除できます。';
+
   $('startDate').value=today();
   save();
   closePanel();
